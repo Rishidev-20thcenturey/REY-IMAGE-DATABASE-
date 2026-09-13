@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="rey-image-live-banner.gif" alt="REY-IMAGE animated banner" width="100%">
+<img src="preview.gif" alt="REY-IMAGE preview animation" width="100%">
 
 **Efficient text-to-image research — built from scratch.**
 
