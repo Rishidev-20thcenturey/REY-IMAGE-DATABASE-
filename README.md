@@ -6,116 +6,81 @@
 
 ## Overview
 
-RAY-IMAGE is an ongoing research project building a capable image-generation system from the ground up. The goal is not to compete with massive proprietary models through raw scale, but to explore how **careful architecture, efficient latent representations, and disciplined training** can produce strong results on modest hardware.
+RAY-IMAGE is an ongoing research project exploring how a capable image-generation system can be built with limited compute through careful engineering, compact representations, and measured experimentation.
 
-The project is developed on free-tier cloud GPUs with a focus on reproducible experiments, measurable diagnostics, and incremental improvements.
+The project is developed on free-tier cloud GPUs and focuses on incremental, reproducible progress rather than simply increasing model size.
 
 ---
 
 ## What It Does
 
-RAY-IMAGE maps a natural-language prompt to an image through a text-conditioned latent generation pipeline.
+RAY-IMAGE takes a natural-language prompt and uses it to generate an image.
 
 | Input | Target Output |
 | :--- | :--- |
-| Natural-language prompt | Image up to 256×256 at the current N8 stage |
+| Natural-language prompt | Up to 256×256 at the current stage |
 
-The longer-term roadmap targets higher resolutions and more capable conditioning.
+Higher-resolution generation is part of the future roadmap.
 
 ---
 
 ## Architecture
 
-RAY-IMAGE uses a **latent-space flow-matching architecture** with three main components:
+The public architecture can be summarized as three cooperating parts:
 
-| Component | Current design | Role |
-| :--- | :--- | :--- |
-| **Text Encoder** | Qwen3-4B, frozen, 8-bit | Converts a prompt into token-level semantic embeddings |
-| **DiT v2** | ~180M-class Transformer, 18 blocks, 768 hidden size, 12 heads | Predicts the transformation of noisy image latents under text + timestep conditioning |
-| **VAE v2** | 16-channel latent autoencoder | Converts 256×256 RGB images ↔ 16×32×32 latent tensors |
+| Component | Purpose |
+| :--- | :--- |
+| **Text Encoder** | Converts the prompt into a semantic representation |
+| **Diffusion Transformer** | Generates and refines an image representation under text and timestep conditioning |
+| **VAE** | Converts between images and a compact latent representation |
 
-### Data Flow
-
-```text
-Prompt
-  │
-  ▼
-Qwen3-4B Text Encoder
-  │  token embeddings [B, L, 2560]
-  ▼
-Gated Cross-Attention
-  │
-Random latent noise [B, 16, 32, 32]
-  │
-  ▼
-DiT v2
-  │  256 spatial tokens × 768 dimensions
-  │  timestep conditioning
-  ▼
-Predicted latent transformation
-  │
-  ▼
-VAE v2 Decoder
-  │
-  ▼
-256×256 RGB image
-```
-
-### DiT v2 at a Glance
-
-The current real-world DiT architecture is designed around the VAE's 16×32×32 latent space:
-
-- **Input:** `[B, 16, 32, 32]`
-- **Patch size:** `2×2`
-- **Spatial token grid:** `16×16`
-- **Token count:** `256`
-- **Transformer width:** `768`
-- **Transformer depth:** `18` blocks
-- **Attention heads:** `12`
-- **Text context:** `2560`-dimensional Qwen embeddings
-- **Conditioning:** sinusoidal timestep embedding + pooled text conditioning + token-level cross-attention
-- **Cross-attention:** gated residual path for controllable text influence
-- **Output:** reconstructed latent field `[B, 16, 32, 32]`
-
-### VAE v2 at a Glance
-
-The VAE was upgraded from the earlier 4-channel toy representation to a larger real-world latent space:
+### Simplified Pipeline
 
 ```text
-256×256×3 RGB
-      │
-      ▼
-  VAE Encoder
-      │
-      ▼
-  16×32×32 latent
-      │
-      ▼
-  VAE Decoder
-      │
-      ▼
-256×256×3 RGB
+Text Prompt
+    │
+    ▼
+Text Encoder
+    │
+    ▼
+Text Features ───────────┐
+                         │
+Random Latent Noise      │
+    │                    │
+    └──────► Transformer ◄┘
+                 │
+                 ▼
+          Image Latent
+                 │
+                 ▼
+               VAE
+                 │
+                 ▼
+             Output Image
 ```
 
-This gives the DiT substantially more latent capacity than the original N0/N2 4×8×8 representation while keeping the transformer operating on a compact spatial grid.
+The model operates primarily in **latent space**, allowing the expensive generation stage to work on a smaller representation than the final RGB image.
+
+A lightweight form of gated text conditioning is used so that text information can influence the generation process without requiring the transformer to operate directly on raw pixels.
+
+> Detailed layer dimensions, training schedules, and internal research techniques are intentionally kept private while development is active.
 
 ---
 
-## The N-Series Methodology
+## The N-Series
 
-RAY-IMAGE is developed through a numbered experiment series (N0 → N12). Each phase introduces a controlled engineering or research change and is validated before moving forward.
+RAY-IMAGE is developed through a sequence of numbered experiments.
 
 | Phase | Focus |
 | :--- | :--- |
-| **N0–N4** | Foundation — VAE, baseline DiT, flow matching, diagnostics |
-| **N5** | Gated cross-attention for stronger text conditioning |
-| **N5.1–N5.2** | Evaluation calibration and bottleneck diagnosis |
-| **N6** | Higher-capacity VAE with perceptual and adversarial losses |
-| **N7** | DiT retraining on improved latent representations |
-| **N8** | Real-world data, 256×256 VAE, Qwen conditioning, DiT v2 |
-| **N9–N12** | Progressive resolution, larger models, control, deployment |
+| **N0–N4** | Foundation and diagnostics |
+| **N5** | Improved text conditioning |
+| **N6** | Higher-capacity latent representation |
+| **N7** | Improved latent-space generation |
+| **N8** | Real-world data and larger-scale architecture |
+| **N9–N12** | Resolution, scaling, control, and deployment |
 
-Each phase aims to produce a concrete artifact rather than only a research note.
+Each phase is intended to produce a measurable engineering result before the next major change is introduced.
 
 ---
 
@@ -123,41 +88,36 @@ Each phase aims to produce a concrete artifact rather than only a research note.
 
 | Component | Status |
 | :--- | :--- |
-| Toy-scale pipeline | ✅ Complete |
-| 16-channel VAE | ✅ Complete |
-| Real-world VAE v2 at 256×256 | ✅ Trained |
-| Qwen3-4B conditioning | ✅ Integrated |
-| DiT v2 architecture | ✅ Built |
-| Real-world DiT training | 🔄 Next |
+| Toy-scale validation | ✅ Complete |
+| Real-world VAE | ✅ Trained |
+| Text conditioning | ✅ Integrated |
+| Larger DiT architecture | ✅ Built |
+| Real-world DiT training | 🔄 In progress |
 | Public model release | 🔜 Planned |
 
-**Current training data:** MONET and other compatible open image datasets.
+**Current development data:** Open image datasets, including MONET.
 
-**Development hardware:** Kaggle free-tier GPUs, including T4-class acceleration.
+**Compute:** Free-tier cloud GPUs.
 
 ---
 
 ## What Makes This Different
 
-### 1. No pretrained image generator
+### Built Around Efficiency
 
-The image-generation core is built from first principles. The project does not start from an existing pretrained image generator and fine-tune it.
+The generation model works in a compact latent representation instead of directly modeling full-resolution RGB images.
 
-### 2. Research-driven iteration
+### Research-Driven Development
 
-When a model fails, the approach is to isolate the failure mode with a diagnostic experiment before spending more compute.
+Failures are investigated with small diagnostic experiments before committing significant compute to a new training run.
 
-### 3. Latent efficiency
+### Built From Scratch
 
-The expensive transformer operates on compact latent tensors rather than full-resolution RGB pixels. At N8, a 256×256 image is represented by only **16×32×32 latent values** before patch tokenization.
+The image-generation core is developed rather than starting from a pretrained image generator.
 
-### 4. Frozen language conditioning
+### Designed for Constrained Hardware
 
-The text encoder is separated from image-model training, allowing the DiT to concentrate its capacity on learning the image-generation problem while reusing a strong semantic representation.
-
-### 5. Resumable experimentation
-
-Training is designed around checkpointed, chunked sessions so experiments can survive free-tier runtime limits without throwing away progress.
+The project is structured around free-tier and consumer-class GPU environments, making checkpointing and efficient experiments important from the beginning.
 
 ---
 
@@ -165,28 +125,21 @@ Training is designed around checkpointed, chunked sessions so experiments can su
 
 | Phase | Goal | Status |
 | :--- | :--- | :--- |
-| **N8** | Real-world 256×256 generation | 🔄 Current |
-| **N9** | Progressive resolution scaling (512×512) | Planned |
-| **N10** | Public 500M-parameter model release | Planned |
-| **N11** | Optional sparse-MoE scaling | Planned |
-| **N12** | Layout control, reasoning features, quantized deployment | Planned |
+| **N8** | Real-world image generation at the current resolution | 🔄 Current |
+| **N9** | Progressive resolution scaling | Planned |
+| **N10** | Larger public model release | Planned |
+| **N11** | Optional sparse scaling | Planned |
+| **N12** | Better control and efficient deployment | Planned |
 
-Future evaluation will focus on areas such as prompt alignment, text rendering, spatial composition, and controllable layout.
-
-Detailed training recipes and internal architecture notes remain private during active research.
+Future work will focus on prompt alignment, composition, image quality, and controllable generation.
 
 ---
 
 ## Why Build From Scratch?
 
-Modern AI tooling makes it easy to call or fine-tune existing models. RAY-IMAGE is an experiment in learning what happens when the underlying image-generation system is engineered directly.
+RAY-IMAGE is also an engineering and research exercise: understanding how the pieces of an image-generation system work together, how failures arise, and how useful results can be achieved under strict compute constraints.
 
-The project is intended to:
-
-- understand diffusion and flow-matching systems at the implementation level;
-- study efficient training under strict compute constraints;
-- develop architecture through measured experiments rather than scale alone; and
-- eventually release a useful, reproducible image-generation model.
+The long-term goal is to turn those experiments into a practical, reproducible image-generation system.
 
 ---
 
@@ -195,8 +148,7 @@ The project is intended to:
 | Layer | Tool |
 | :--- | :--- |
 | **Framework** | PyTorch |
-| **Text conditioning** | Qwen3-4B |
-| **Compute** | Kaggle GPU free tier |
+| **Compute** | Kaggle / free-tier GPU infrastructure |
 | **Code hosting** | GitHub |
 | **Model hosting** | Hugging Face |
 | **Data pipeline** | Hugging Face Datasets / open datasets |
